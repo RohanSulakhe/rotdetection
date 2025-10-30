@@ -22,15 +22,6 @@ base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(224
 for layer in base_model.layers:
     layer.trainable = False
 
-# Custom classifier
-x = layers.GlobalAveragePooling2D()(base_model.output)
-x = layers.Dense(128, activation='relu')(x)
-x = layers.Dropout(0.3)(x)
-output = layers.Dense(4, activation='softmax')(x)   # 🔹 Adjust dynamically later if needed
-
-model = models.Model(inputs=base_model.input, outputs=output)
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
 # -------------------------------------------------------
 # DATA GENERATORS
 # -------------------------------------------------------
@@ -55,13 +46,20 @@ val_gen = val_datagen.flow_from_directory(
     class_mode='categorical'
 )
 
-# 🔹 Auto-detect class count and relink model output
+# -------------------------------------------------------
+# DYNAMICALLY BUILD CLASSIFIER HEAD
+# -------------------------------------------------------
 num_classes = len(train_gen.class_indices)
-model.layers[-1] = layers.Dense(num_classes, activation='softmax')(model.layers[-2].output)
-model = models.Model(inputs=base_model.input, outputs=model.layers[-1])
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-
 print(f"🔹 Detected {num_classes} classes:", list(train_gen.class_indices.keys()))
+
+x = base_model.output
+x = layers.GlobalAveragePooling2D()(x)
+x = layers.Dense(128, activation='relu')(x)
+x = layers.Dropout(0.3)(x)
+output = layers.Dense(num_classes, activation='softmax')(x)
+
+model = models.Model(inputs=base_model.input, outputs=output)
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
 # -------------------------------------------------------
 # TRAIN MODEL

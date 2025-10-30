@@ -1,22 +1,59 @@
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+import json
+import os
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.inception_v3 import preprocess_input
 
-# ✅ Load your trained model
-model = tf.keras.models.load_model("apple_fresh_rotten.h5")
+# -------------------------------------------------------
+# PATHS
+# -------------------------------------------------------
+MODEL_PATH = "fruit_fresh_rotten.h5"
+LABELS_PATH = "labels.txt"
+VAL_DIR = "data/validation"   # Folder to test
 
-# ✅ Setup validation data generator
-val_dir = "data/validation"  # change this if your folder name is different
+# -------------------------------------------------------
+# LOAD MODEL + LABELS
+# -------------------------------------------------------
+print("🔹 Loading model and labels...")
+model = tf.keras.models.load_model(MODEL_PATH)
 
-val_datagen = ImageDataGenerator(rescale=1.0/255.0)
+with open(LABELS_PATH, "r") as f:
+    labels = json.load(f)
+print("✅ Loaded labels:", labels)
 
-val_generator = val_datagen.flow_from_directory(
-    val_dir,
-    target_size=(224, 224),
-    batch_size=32,
-    class_mode='categorical'
-)
+# -------------------------------------------------------
+# VALIDATE MODEL
+# -------------------------------------------------------
+correct = 0
+total = 0
 
-# ✅ Evaluate the model
-loss, accuracy = model.evaluate(val_generator)
-print(f"\n✅ Validation Accuracy: {accuracy * 100:.2f}%")
-print(f"✅ Validation Loss: {loss:.4f}")
+for class_name in os.listdir(VAL_DIR):
+    class_path = os.path.join(VAL_DIR, class_name)
+    if not os.path.isdir(class_path):
+        continue
+
+    for img_name in os.listdir(class_path):
+        img_path = os.path.join(class_path, img_name)
+        img = image.load_img(img_path, target_size=(224, 224))
+        img_array = image.img_to_array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = preprocess_input(img_array)
+
+        preds = model.predict(img_array, verbose=0)
+        pred_label = labels[np.argmax(preds)]
+        confidence = np.max(preds) * 100
+
+        total += 1
+        if pred_label == class_name:
+            correct += 1
+
+        print(f"🖼️ {img_name} → Predicted: {pred_label} ({confidence:.2f}%) | Actual: {class_name}")
+
+# -------------------------------------------------------
+# ACCURACY REPORT
+# -------------------------------------------------------
+accuracy = (correct / total) * 100 if total > 0 else 0
+print("\n---------------------------------------------")
+print(f"✅ Validation Accuracy: {accuracy:.2f}%")
+print("---------------------------------------------")
